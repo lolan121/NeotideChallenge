@@ -49,7 +49,8 @@ connection.commit()
 data = pd.read_csv("entities.csv", index_col=False)
 data.columns = ["id", "arrival_date", "release_date", "ward", "weight"]
 
-# Drop duplicates based on compound primary key 
+# Drop duplicates based on compound primary key. NOTE! Omitted here, this is 
+# instead handled by ignoring duplicate conflicts in SQL insert clause
 # data = data.drop_duplicates(subset=["id", "arrival_date"], keep="first")
 
 # Convert string dates to datetime64, easier to work with for filtering
@@ -79,6 +80,7 @@ def insert_do_nothing_on_conflicts(sqltable, conn, keys, data_iter):
         table_name = sqltable.name
     mytable = table(table_name, *columns)
 
+    # Construct statement to be executed
     insert_statement = insert(mytable).values(list(data_iter))
     confl_insert_statement = insert_statement.on_conflict_do_nothing(index_elements=['id', 'arrival_date'])
 
