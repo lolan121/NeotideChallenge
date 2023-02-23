@@ -1,8 +1,10 @@
 import psycopg2
 import pandas as pd
-from getpass import getpass
-from sqlalchemy import create_engine
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from getpass import getpass
+from sqlalchemy import create_engine, table, column
+from sqlalchemy.dialects.postgresql import insert
+
 
 """"
 Here pandas is used for reading the csv data and dealing with the data itself.
@@ -47,8 +49,8 @@ connection.commit()
 data = pd.read_csv("entities.csv", index_col=False)
 data.columns = ["id", "arrival_date", "release_date", "ward", "weight"]
 
-# Drop duplicates based on compound primary key
-data = data.drop_duplicates(subset=["id", "arrival_date"], keep="first")
+# Drop duplicates based on compound primary key 
+# data = data.drop_duplicates(subset=["id", "arrival_date"], keep="first")
 
 # Convert string dates to datetime64, easier to work with for filtering
 data['arrival_date'] = pd.to_datetime(data['arrival_date'], format='%d.%m.%Y')
@@ -63,8 +65,27 @@ filtered_data['release_date'] = filtered_data['release_date'].dt.date
 # SQLAlchemy 'engine' used to conveniently insert pandas dataframes into DB tables
 engine = create_engine('postgresql+psycopg2://' + username + ":" + password + "@localhost/" + db_name)
 
+# Custom method for performing the SQL insertion, in this case we 
+# want to do nothing on primary key conflicts
+def insert_do_nothing_on_conflicts(sqltable, conn, keys, data_iter):
+    
+    # Construct table from data to be inserted
+    columns=[]
+    for c in keys:
+        columns.append(column(c))
+    if sqltable.schema:
+        table_name = '{}.{}'.format(sqltable.schema, sqltable.name)
+    else:
+        table_name = sqltable.name
+    mytable = table(table_name, *columns)
+
+    insert_statement = insert(mytable).values(list(data_iter))
+    confl_insert_statement = insert_statement.on_conflict_do_nothing(index_elements=['id', 'arrival_date'])
+
+    conn.execute(confl_insert_statement)
+
 # Insert the data into the DB table
-filtered_data.to_sql(table_name, engine, if_exists='append', index=False)
+filtered_data.to_sql(table_name, engine, if_exists='append', index=False, method=insert_do_nothing_on_conflicts)
 
 connection.commit()
 connection.close()
